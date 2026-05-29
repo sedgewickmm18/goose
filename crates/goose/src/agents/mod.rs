@@ -2,6 +2,7 @@ mod agent;
 pub mod container;
 pub mod execute_commands;
 pub mod extension;
+pub mod extension_change_strategy;
 pub mod extension_malware_check;
 pub mod extension_manager;
 pub mod final_output_tool;
@@ -26,6 +27,7 @@ pub use agent::{Agent, AgentConfig, AgentEvent, ExtensionLoadResult, GoosePlatfo
 pub use container::Container;
 pub use execute_commands::COMPACT_TRIGGERS;
 pub use extension::{ExtensionConfig, ExtensionError};
+pub use extension_change_strategy::ExtensionChangeStrategy;
 pub use extension_manager::ExtensionManager;
 pub use prompt_manager::PromptManager;
 pub use subagent_handler::SUBAGENT_TOOL_REQUEST_TYPE;

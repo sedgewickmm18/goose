@@ -1939,6 +1939,15 @@ impl Agent {
                                             warn!("Failed to save extension state after runtime changes: {}", e);
                                         }
                                         tools_updated = true;
+                                        
+                                        // Invalidate context when extensions change
+                                        let strategy = crate::agents::ExtensionChangeStrategy::from_config();
+                                        if let Err(e) = self.invalidate_context_for_extension_change(
+                                            &session_config.id,
+                                            strategy
+                                        ).await {
+                                            warn!("Failed to invalidate context after extension change: {}", e);
+                                        }
                                     }
                                 }
 
@@ -2456,6 +2465,122 @@ impl Agent {
         *self.current_goose_mode.lock().await = session.goose_mode;
         Ok(provider_changed)
     }
+    /// Invalidate LLM context when extensions are changed
+    /// This ensures the LLM receives updated tool definitions
+    pub async fn invalidate_context_for_extension_change(
+        &self,
+        session_id: &str,
+        strategy: crate::agents::ExtensionChangeStrategy,
+    ) -> Result<()> {
+        info!(
+            "Invalidating context for extension change using strategy: {}",
+            strategy
+        );
+
+        match strategy {
+            crate::agents::ExtensionChangeStrategy::Rebuild => {
+                self.trigger_context_rebuild(session_id).await?;
+            }
+            crate::agents::ExtensionChangeStrategy::Clear => {
+                self.clear_conversation_history(session_id).await?;
+            }
+            crate::agents::ExtensionChangeStrategy::Notify => {
+                self.add_extension_change_notification(session_id).await?;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Trigger conversation compaction to regenerate system prompt with updated tools
+    async fn trigger_context_rebuild(&self, session_id: &str) -> Result<()> {
+        info!("Triggering context rebuild for session {}", session_id);
+
+        // Get current session and conversation
+        let session = self
+            .config
+            .session_manager
+            .get_session(session_id, false)
+            .await?;
+        
+        // Get conversation from session
+        let conversation = match &session.conversation {
+            Some(conv) => conv.clone(),
+            None => {
+                info!("No conversation in session, skipping context rebuild");
+                return Ok(());
+            }
+        };
+
+        // Only compact if there are messages to compact
+        if conversation.messages().is_empty() {
+            info!("No messages to compact, skipping context rebuild");
+            return Ok(());
+        }
+
+        // Get provider for compaction
+        let provider = self.provider().await?;
+
+        // Trigger compaction - this will regenerate the system prompt
+        let (compacted_conversation, usage) = compact_messages(
+            provider.as_ref(),
+            session_id,
+            &conversation,
+            false, // not manual compact
+        )
+        .await?;
+
+        info!(
+            "Context rebuild complete, usage: input={:?} output={:?}",
+            usage.usage.input_tokens, usage.usage.output_tokens
+        );
+
+        // Replace conversation in session
+        self.config
+            .session_manager
+            .replace_conversation(session_id, &compacted_conversation)
+            .await?;
+
+        Ok(())
+    }
+
+    /// Clear conversation history when extensions change
+    async fn clear_conversation_history(&self, session_id: &str) -> Result<()> {
+        info!("Clearing conversation history for session {}", session_id);
+
+        // Create empty conversation
+        let empty_conversation = Conversation::default();
+
+        // Replace conversation in session
+        self.config
+            .session_manager
+            .replace_conversation(session_id, &empty_conversation)
+            .await?;
+
+        Ok(())
+    }
+
+    /// Add a system notification about extension changes
+    async fn add_extension_change_notification(&self, session_id: &str) -> Result<()> {
+        info!("Adding extension change notification for session {}", session_id);
+
+        // Create notification message
+        let message = Message::assistant()
+            .with_text(
+                "Note: Available tools have changed due to extension modifications. \
+                 Please review the updated tool list in your next response.",
+            )
+            .with_metadata(crate::conversation::message::MessageMetadata::agent_only());
+
+        // Add message to session
+        self.config
+            .session_manager
+            .add_message(session_id, &message)
+            .await?;
+
+        Ok(())
+    }
+
 
     /// Override the system prompt with a custom template
     pub async fn override_system_prompt(&self, template: String) {

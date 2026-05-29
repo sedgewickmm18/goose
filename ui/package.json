@@ -6,6 +6,7 @@
     "desktop",
     "goose-binary/*"
   ],
+  "_comment_goose2": "goose2 workspace excluded - add 'goose2' to workspaces array above to re-enable",
   "scripts": {
     "changeset": "changeset",
     "version": "changeset version",

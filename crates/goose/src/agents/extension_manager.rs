@@ -140,8 +140,8 @@ pub struct ExtensionManager {
     extensions: Mutex<HashMap<String, Extension>>,
     context: PlatformExtensionContext,
     provider: SharedProvider,
-    tools_cache: Mutex<Option<Arc<Vec<Tool>>>>,
-    tools_cache_version: AtomicU64,
+    tools_cache: Arc<Mutex<Option<Arc<Vec<Tool>>>>>,
+    tools_cache_version: Arc<AtomicU64>,
     client_name: String,
     capabilities: ExtensionManagerCapabilities,
 }
@@ -752,8 +752,8 @@ impl ExtensionManager {
                 use_login_shell_path,
             },
             provider,
-            tools_cache: Mutex::new(None),
-            tools_cache_version: AtomicU64::new(0),
+            tools_cache: Arc::new(Mutex::new(None)),
+            tools_cache_version: Arc::new(AtomicU64::new(0)),
             client_name,
             capabilities,
         }
@@ -1631,6 +1631,29 @@ impl ExtensionManager {
         ))
     }
 
+    /// Check if a tool has side effects based on its read_only_hint annotation.
+    /// Returns true if the tool modifies state (has side effects).
+    ///
+    /// Conservative approach:
+    /// - Returns false only if read_only_hint is explicitly true
+    /// - Returns true if read_only_hint is false or None (unknown)
+    async fn tool_has_side_effects(&self, session_id: &str, tool_name: &str) -> bool {
+        // Get the tool from cache to check its annotations
+        if let Ok(tools) = self.get_all_tools_cached(session_id).await {
+            if let Some(tool) = tools.iter().find(|t| t.name == tool_name) {
+                if let Some(annotations) = &tool.annotations {
+                    // Only return false (no side effects) if explicitly marked as read-only
+                    if let Some(read_only) = annotations.read_only_hint {
+                        return !read_only;
+                    }
+                }
+            }
+        }
+        
+        // Conservative default: assume side effects if annotation is missing or unknown
+        true
+    }
+
     pub async fn dispatch_tool_call(
         &self,
         ctx: &super::tool_execution::ToolCallContext,
@@ -1657,6 +1680,9 @@ impl ExtensionManager {
             }
         }
 
+        // Check if tool has side effects before execution
+        let has_side_effects = self.tool_has_side_effects(&ctx.session_id, &tool_name_str).await;
+
         let arguments = tool_call.arguments.clone();
         let client = resolved.client.clone();
         let hydration_client = client.clone();
@@ -1671,6 +1697,11 @@ impl ExtensionManager {
             ctx.working_dir.clone(),
             ctx.tool_call_request_id.clone(),
         );
+
+        // Capture cache invalidation primitives for the async block
+        let tools_cache_version = self.tools_cache_version.clone();
+        let tools_cache = self.tools_cache.clone();
+        let tool_name_for_log = tool_name_str.clone();
 
         let fut = async move {
             tracing::debug!(
@@ -1702,6 +1733,16 @@ impl ExtensionManager {
                 {
                     insert_trusted_tool_update_meta(&mut result, &attachment);
                 }
+            }
+
+            // Invalidate tools cache if the tool has side effects and executed successfully
+            if has_side_effects && result.is_error != Some(true) {
+                tracing::debug!(
+                    "Invalidating tools cache after tool execution: tool={} has_side_effects=true",
+                    tool_name_for_log
+                );
+                tools_cache_version.fetch_add(1, Ordering::SeqCst);
+                *tools_cache.lock().await = None;
             }
 
             Ok(result)

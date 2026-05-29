@@ -1138,6 +1138,7 @@ config_value!(GOOSE_DISABLE_SESSION_NAMING, bool);
 config_value!(GOOSE_DISABLE_TOOL_CALL_SUMMARY, bool);
 config_value!(GOOSE_THINKING_EFFORT, String);
 config_value!(GOOSE_DEFAULT_EXTENSION_TIMEOUT, u64);
+config_value!(GOOSE_EXTENSION_CHANGE_STRATEGY, String, "rebuild");
 
 fn find_workspace_or_exe_root() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
