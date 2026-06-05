@@ -1002,11 +1002,7 @@ function ToolResultView({ result, isStartExpanded }: ToolResultViewProps) {
       isStartExpanded={isStartExpanded}
     >
       <div className="pl-4 pr-4 py-4">
-        {hasText(result) && (
-          <pre className="font-mono text-xs whitespace-pre-wrap max-w-full overflow-x-auto">
-            {result.text.trim()}
-          </pre>
-        )}
+        {hasText(result) && <MarkdownContent content={result.text.trim()} />}
         {hasImage(result) && (
           <img
             src={`data:${result.mimeType};base64,${result.data}`}

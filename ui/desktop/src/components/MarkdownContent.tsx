@@ -182,19 +182,47 @@ const MarkdownCode = memo(
   })
 );
 
+// Normalize protocol-less external URLs like "example.com/path" to "https://example.com/path"
+// while preserving relative paths, anchors, and explicit schemes.
+const normalizeExternalUrl = (url: string): string => {
+  const trimmed = url.trim();
+
+  if (
+    trimmed === '' ||
+    trimmed.startsWith('/') ||
+    trimmed.startsWith('./') ||
+    trimmed.startsWith('../') ||
+    trimmed.startsWith('#')
+  ) {
+    return trimmed;
+  }
+
+  if (/^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(trimmed)) {
+    return trimmed;
+  }
+
+  if (/^[^/\s]+\.[^/\s]+(?:[/:?#]|$)/.test(trimmed)) {
+    return `https://${trimmed}`;
+  }
+
+  return trimmed;
+};
+
 // Custom URL transform to preserve deep link URLs (spotify:, vscode:, slack:, etc.)
 // React-markdown's default only allows http/https/mailto and strips all other protocols
 // We allow all protocols except dangerous ones (javascript:, data:, file:, etc.)
 const customUrlTransform = (url: string): string => {
+  const normalizedUrl = normalizeExternalUrl(url);
+
   try {
-    const protocol = new URL(url).protocol;
+    const protocol = new URL(normalizedUrl).protocol;
     if (BLOCKED_PROTOCOLS.includes(protocol)) {
       return '';
     }
   } catch {
-    // Not a valid URL, allow it (could be relative path)
+    // Not a valid absolute URL, allow it (could be relative path)
   }
-  return url;
+  return normalizedUrl;
 };
 
 const MarkdownContent = memo(function MarkdownContent({
@@ -215,22 +243,29 @@ const MarkdownContent = memo(function MarkdownContent({
     }
   }, [content]);
 
-  const handleConfirmOpen = useCallback(async () => {
-    if (pendingLink) {
+  const openExternalLink = useCallback(
+    async (href: string) => {
       try {
-        await window.electron.openExternal(pendingLink.href);
+        await window.electron.openExternal(href);
       } catch {
         await window.electron.showMessageBox({
           type: 'error',
           buttons: ['OK'],
           title: intl.formatMessage(i18n.failedToOpenLink),
           message: intl.formatMessage(i18n.noApplicationFound),
-          detail: pendingLink.href,
+          detail: href,
         });
       }
+    },
+    [intl]
+  );
+
+  const handleConfirmOpen = useCallback(async () => {
+    if (pendingLink) {
+      await openExternalLink(pendingLink.href);
     }
     setPendingLink(null);
-  }, [pendingLink, intl]);
+  }, [pendingLink, openExternalLink]);
 
   const handleCancelOpen = useCallback(() => {
     setPendingLink(null);
@@ -281,12 +316,14 @@ const MarkdownContent = memo(function MarkdownContent({
                     e.stopPropagation();
                     if (!props.href) return;
 
-                    if (isProtocolSafe(props.href)) {
-                      window.electron.openExternal(props.href);
+                    const normalizedHref = normalizeExternalUrl(props.href);
+
+                    if (isProtocolSafe(normalizedHref)) {
+                      void openExternalLink(normalizedHref);
                     } else {
-                      const protocol = getProtocol(props.href);
+                      const protocol = getProtocol(normalizedHref);
                       if (!protocol) return;
-                      setPendingLink({ protocol, href: props.href });
+                      setPendingLink({ protocol, href: normalizedHref });
                     }
                   }}
                 />

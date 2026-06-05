@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from 'vitest';
-import { render, type RenderOptions } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { fireEvent, render, type RenderOptions } from '@testing-library/react';
 import { screen, waitFor } from '@testing-library/dom';
 import MarkdownContent from './MarkdownContent';
 import { IntlTestWrapper } from '../i18n/test-utils';
@@ -12,6 +12,14 @@ vi.mock('./icons', () => ({
   Check: () => <div data-testid="check-icon">✓</div>,
   Copy: () => <div data-testid="copy-icon">📋</div>,
 }));
+
+beforeEach(() => {
+  window.electron = {
+    ...window.electron,
+    openExternal: vi.fn().mockResolvedValue(undefined),
+    showMessageBox: vi.fn().mockResolvedValue({ response: 0 }),
+  };
+});
 
 describe('MarkdownContent', () => {
   describe('HTML Security Integration', () => {
@@ -219,6 +227,60 @@ console.log('Hello, World!');
         expect(link).toHaveAttribute('href', 'https://block.dev');
         expect(link).toHaveAttribute('target', '_blank');
         expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+      });
+    });
+
+    it('opens safe links through the Electron bridge when clicked', async () => {
+      const content = '[Visit Block](https://block.dev)';
+
+      renderWithIntl(<MarkdownContent content={content} />);
+
+      const link = await screen.findByRole('link', { name: 'Visit Block' });
+      fireEvent.click(link);
+
+      await waitFor(() => {
+        expect(window.electron.openExternal).toHaveBeenCalledWith('https://block.dev');
+      });
+    });
+
+    it('shows an error dialog when opening a safe link fails', async () => {
+      const content = '[Visit Block](https://block.dev)';
+      window.electron.openExternal = vi.fn().mockRejectedValue(new Error('open failed'));
+
+      renderWithIntl(<MarkdownContent content={content} />);
+
+      const link = await screen.findByRole('link', { name: 'Visit Block' });
+      fireEvent.click(link);
+
+      await waitFor(() => {
+        expect(window.electron.openExternal).toHaveBeenCalledWith('https://block.dev');
+        expect(window.electron.showMessageBox).toHaveBeenCalledWith({
+          type: 'error',
+          buttons: ['OK'],
+          title: 'Failed to Open Link',
+          message: 'No application found to open this link.',
+          detail: 'https://block.dev',
+        });
+      });
+    });
+
+    it('normalizes protocol-less external links to https before opening', async () => {
+      const content = '[IBM Task](dai.dev.cloud.ibm.com/governance/workflow/tasks?taskId=123)';
+
+      renderWithIntl(<MarkdownContent content={content} />);
+
+      const link = await screen.findByRole('link', { name: 'IBM Task' });
+      expect(link).toHaveAttribute(
+        'href',
+        'https://dai.dev.cloud.ibm.com/governance/workflow/tasks?taskId=123'
+      );
+
+      fireEvent.click(link);
+
+      await waitFor(() => {
+        expect(window.electron.openExternal).toHaveBeenCalledWith(
+          'https://dai.dev.cloud.ibm.com/governance/workflow/tasks?taskId=123'
+        );
       });
     });
 
