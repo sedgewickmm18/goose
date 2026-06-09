@@ -110,6 +110,7 @@ pub enum InteractionState {
     #[default]
     Pending,
     Submitted,
+    Declined,
 }
 
 fn notification_schema<T>(generator: &mut SchemaGenerator) -> CustomMethodSchema

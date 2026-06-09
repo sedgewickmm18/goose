@@ -393,19 +393,22 @@ impl ClientHandler for GooseClient {
             }
         };
 
-        ActionRequiredManager::global()
+        match ActionRequiredManager::global()
             .request_and_wait(message, schema_value, Duration::from_secs(300))
             .await
-            .map(|user_data| {
-                CreateElicitationResult::new(ElicitationAction::Accept).with_content(user_data)
-            })
-            .map_err(|e| {
-                ErrorData::new(
-                    ErrorCode::INTERNAL_ERROR,
-                    format!("Elicitation request timed out or failed: {}", e),
-                    None,
-                )
-            })
+        {
+            Ok(crate::action_required_manager::ElicitationOutcome::Accept(user_data)) => {
+                Ok(CreateElicitationResult::new(ElicitationAction::Accept).with_content(user_data))
+            }
+            Ok(crate::action_required_manager::ElicitationOutcome::Decline) => {
+                Ok(CreateElicitationResult::new(ElicitationAction::Decline))
+            }
+            Err(e) => Err(ErrorData::new(
+                ErrorCode::INTERNAL_ERROR,
+                format!("Elicitation request timed out or failed: {}", e),
+                None,
+            )),
+        }
     }
 
     fn get_info(&self) -> ClientInfo {

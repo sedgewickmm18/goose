@@ -213,6 +213,9 @@ pub enum ActionRequiredData {
         id: String,
         user_data: serde_json::Value,
     },
+    ElicitationDeclined {
+        id: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
@@ -302,6 +305,9 @@ impl fmt::Display for MessageContent {
                 }
                 ActionRequiredData::ElicitationResponse { id, .. } => {
                     write!(f, "[ActionRequired: ElicitationResponse for {}]", id)
+                }
+                ActionRequiredData::ElicitationDeclined { id } => {
+                    write!(f, "[ActionRequired: ElicitationDeclined for {}]", id)
                 }
             },
             MessageContent::FrontendToolRequest(r) => match &r.tool_call {
@@ -484,6 +490,12 @@ impl MessageContent {
                 id: id.into(),
                 user_data,
             },
+        })
+    }
+
+    pub fn action_required_elicitation_declined<S: Into<String>>(id: S) -> Self {
+        MessageContent::ActionRequired(ActionRequired {
+            data: ActionRequiredData::ElicitationDeclined { id: id.into() },
         })
     }
 

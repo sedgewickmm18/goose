@@ -198,8 +198,12 @@ fn collect_submitted_elicitation_ids(messages: &[Message]) -> HashSet<String> {
     for message in messages {
         for content_item in &message.content {
             if let MessageContent::ActionRequired(action_required) = content_item {
-                if let ActionRequiredData::ElicitationResponse { id, .. } = &action_required.data {
-                    submitted_ids.insert(id.clone());
+                match &action_required.data {
+                    ActionRequiredData::ElicitationResponse { id, .. }
+                    | ActionRequiredData::ElicitationDeclined { id } => {
+                        submitted_ids.insert(id.clone());
+                    }
+                    _ => {}
                 }
             }
         }

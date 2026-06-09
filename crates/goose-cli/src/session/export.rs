@@ -361,6 +361,12 @@ pub fn message_to_markdown(message: &Message, export_all_content: bool) -> Strin
                             .unwrap_or_else(|_| "{}".to_string())
                     ));
                 }
+                ActionRequiredData::ElicitationDeclined { id } => {
+                    md.push_str(&format!(
+                        "**Action Required** (elicitation_declined): {}\n\n",
+                        id
+                    ));
+                }
             },
             MessageContent::Text(text) => {
                 md.push_str(&text.text);

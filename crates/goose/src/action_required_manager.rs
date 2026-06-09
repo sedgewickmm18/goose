@@ -10,8 +10,13 @@ use uuid::Uuid;
 
 use crate::conversation::message::{Message, MessageContent};
 
+pub enum ElicitationOutcome {
+    Accept(Value),
+    Decline,
+}
+
 struct PendingRequest {
-    response_tx: Option<tokio::sync::oneshot::Sender<Value>>,
+    response_tx: Option<tokio::sync::oneshot::Sender<ElicitationOutcome>>,
 }
 
 pub struct ActionRequiredManager {
@@ -41,7 +46,7 @@ impl ActionRequiredManager {
         message: String,
         schema: Value,
         timeout_duration: Duration,
-    ) -> Result<Value> {
+    ) -> Result<ElicitationOutcome> {
         let id = Uuid::new_v4().to_string();
         let (tx, rx) = tokio::sync::oneshot::channel();
         let pending_request = PendingRequest {
@@ -62,7 +67,7 @@ impl ActionRequiredManager {
         }
 
         let result = match timeout(timeout_duration, rx).await {
-            Ok(Ok(user_data)) => Ok(user_data),
+            Ok(Ok(outcome)) => Ok(outcome),
             Ok(Err(_)) => {
                 warn!("Response channel closed for request: {}", id);
                 Err(anyhow::anyhow!("Response channel closed"))
@@ -89,8 +94,27 @@ impl ActionRequiredManager {
 
         let mut pending = pending_arc.lock().await;
         if let Some(tx) = pending.response_tx.take() {
-            if tx.send(user_data).is_err() {
+            if tx.send(ElicitationOutcome::Accept(user_data)).is_err() {
                 warn!("Failed to send response through oneshot channel");
+            }
+        }
+
+        Ok(())
+    }
+
+    pub async fn submit_decline(&self, request_id: String) -> Result<()> {
+        let pending_arc = {
+            let pending = self.pending.read().await;
+            pending
+                .get(&request_id)
+                .cloned()
+                .ok_or_else(|| anyhow::anyhow!("Request not found: {}", request_id))?
+        };
+
+        let mut pending = pending_arc.lock().await;
+        if let Some(tx) = pending.response_tx.take() {
+            if tx.send(ElicitationOutcome::Decline).is_err() {
+                warn!("Failed to send decline through oneshot channel");
             }
         }
 

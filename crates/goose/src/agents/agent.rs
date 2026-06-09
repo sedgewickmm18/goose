@@ -1417,26 +1417,34 @@ impl Agent {
 
         for content in &user_message.content {
             if let MessageContent::ActionRequired(action_required) = content {
-                if let ActionRequiredData::ElicitationResponse { id, user_data } =
-                    &action_required.data
-                {
-                    // Surface stale/cancelled/timed-out elicitations as a hard
-                    // error so callers (e.g. the HTTP handler) can propagate
-                    // failure to the client instead of silently reporting
-                    // success while the blocked tool call stays unblocked.
-                    // The success path returns an empty stream; an Err here
-                    // makes the contract: Ok(empty) on accept, Err on reject.
-                    ActionRequiredManager::global()
-                        .submit_response(id.clone(), user_data.clone())
-                        .await
-                        .map_err(|e| {
-                            error!("Failed to submit elicitation response: {}", e);
-                            anyhow!("Failed to submit elicitation response: {}", e)
-                        })?;
-                    session_manager
-                        .add_message(&session_config.id, &user_message)
-                        .await?;
-                    return Ok(Box::pin(futures::stream::empty()));
+                match &action_required.data {
+                    ActionRequiredData::ElicitationResponse { id, user_data } => {
+                        ActionRequiredManager::global()
+                            .submit_response(id.clone(), user_data.clone())
+                            .await
+                            .map_err(|e| {
+                                error!("Failed to submit elicitation response: {}", e);
+                                anyhow!("Failed to submit elicitation response: {}", e)
+                            })?;
+                        session_manager
+                            .add_message(&session_config.id, &user_message)
+                            .await?;
+                        return Ok(Box::pin(futures::stream::empty()));
+                    }
+                    ActionRequiredData::ElicitationDeclined { id } => {
+                        ActionRequiredManager::global()
+                            .submit_decline(id.clone())
+                            .await
+                            .map_err(|e| {
+                                error!("Failed to submit elicitation decline: {}", e);
+                                anyhow!("Failed to submit elicitation decline: {}", e)
+                            })?;
+                        session_manager
+                            .add_message(&session_config.id, &user_message)
+                            .await?;
+                        return Ok(Box::pin(futures::stream::empty()));
+                    }
+                    _ => {}
                 }
             }
         }
@@ -2036,7 +2044,7 @@ impl Agent {
                                             warn!("Failed to save extension state after runtime changes: {}", e);
                                         }
                                         tools_updated = true;
-                                        
+
                                         // Invalidate context when extensions change
                                         let strategy = crate::agents::ExtensionChangeStrategy::from_config();
                                         if let Err(e) = self.invalidate_context_for_extension_change(
@@ -2645,7 +2653,7 @@ impl Agent {
             .session_manager
             .get_session(session_id, false)
             .await?;
-        
+
         // Get conversation from session
         let conversation = match &session.conversation {
             Some(conv) => conv.clone(),
@@ -2705,7 +2713,10 @@ impl Agent {
 
     /// Add a system notification about extension changes
     async fn add_extension_change_notification(&self, session_id: &str) -> Result<()> {
-        info!("Adding extension change notification for session {}", session_id);
+        info!(
+            "Adding extension change notification for session {}",
+            session_id
+        );
 
         // Create notification message
         let message = Message::assistant()
@@ -2723,7 +2734,6 @@ impl Agent {
 
         Ok(())
     }
-
 
     /// Override the system prompt with a custom template
     pub async fn override_system_prompt(&self, template: String) {

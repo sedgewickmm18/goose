@@ -4195,6 +4195,24 @@
               },
               "user_data": {}
             }
+          },
+          {
+            "type": "object",
+            "required": [
+              "id",
+              "actionType"
+            ],
+            "properties": {
+              "actionType": {
+                "type": "string",
+                "enum": [
+                  "elicitationDeclined"
+                ]
+              },
+              "id": {
+                "type": "string"
+              }
+            }
           }
         ],
         "discriminator": {

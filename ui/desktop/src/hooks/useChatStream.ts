@@ -20,6 +20,7 @@ import {
 import {
   createUserMessage,
   createElicitationResponseMessage,
+  createElicitationDeclineMessage,
   getCompactingMessage,
   getThinkingMessage,
   NotificationEvent,
@@ -47,6 +48,9 @@ interface UseChatStreamReturn {
   submitElicitationResponse: (
     elicitationId: string,
     userData: Record<string, unknown>
+  ) => Promise<void>;
+  declineElicitation: (
+    elicitationId: string
   ) => Promise<void>;
   setRecipeUserParams: (values: Record<string, string>) => Promise<void>;
   stopStreaming: () => void;
@@ -977,6 +981,34 @@ export function useChatStream({
     [sessionId, onFinish]
   );
 
+  const declineElicitation = useCallback(
+    async (elicitationId: string) => {
+      const currentState = stateRef.current;
+
+      if (!currentState.session || currentState.chatState === ChatState.LoadingConversation) {
+        return;
+      }
+
+      const declineMessage = createElicitationDeclineMessage(elicitationId);
+      const nextMessages = [...currentState.messages, declineMessage];
+      dispatch({ type: 'SET_MESSAGES', payload: nextMessages });
+
+      try {
+        await sessionReply({
+          path: { id: sessionId },
+          body: {
+            request_id: uuidv7(),
+            user_message: declineMessage,
+          },
+          throwOnError: true,
+        });
+      } catch (error) {
+        onFinish('Decline error: ' + errorMessage(error));
+      }
+    },
+    [sessionId, onFinish]
+  );
+
   const setRecipeUserParams = useCallback(
     async (user_recipe_values: Record<string, string>) => {
       const currentState = stateRef.current;
@@ -1160,6 +1192,7 @@ export function useChatStream({
     setChatState,
     handleSubmit,
     submitElicitationResponse,
+    declineElicitation,
     stopStreaming,
     setRecipeUserParams,
     tokenState: state.tokenState,

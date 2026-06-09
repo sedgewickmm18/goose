@@ -523,6 +523,9 @@ pub struct ElicitationRespondRequest {
     pub elicitation_id: String,
     #[serde(default)]
     pub user_data: serde_json::Value,
+    /// Set to "decline" to decline the elicitation. Omit or set to "accept" to accept.
+    #[serde(default)]
+    pub action: Option<String>,
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize, JsonSchema)]

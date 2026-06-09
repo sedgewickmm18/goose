@@ -75,6 +75,24 @@ export function createElicitationResponseMessage(
   };
 }
 
+export function createElicitationDeclineMessage(elicitationId: string): Message {
+  return {
+    id: generateMessageId(),
+    role: 'user',
+    created: Math.floor(Date.now() / 1000),
+    content: [
+      {
+        type: 'actionRequired',
+        data: {
+          actionType: 'elicitationDeclined',
+          id: elicitationId,
+        },
+      },
+    ],
+    metadata: { userVisible: false, agentVisible: true },
+  };
+}
+
 export function generateMessageId(): string {
   return Math.random().toString(36).substring(2, 10);
 }

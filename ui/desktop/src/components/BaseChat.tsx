@@ -111,6 +111,7 @@ export default function BaseChat({
     setChatState,
     handleSubmit,
     submitElicitationResponse,
+    declineElicitation,
     stopStreaming,
     sessionLoadError,
     setRecipeUserParams,
@@ -461,6 +462,7 @@ export default function BaseChat({
                     onRenderingComplete={handleRenderingComplete}
                     onMessageUpdate={onMessageUpdate}
                     submitElicitationResponse={submitElicitationResponse}
+                    declineElicitation={declineElicitation}
                   />
                 </SearchView>
 

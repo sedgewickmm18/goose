@@ -1494,6 +1494,7 @@ impl GooseAcpAgent {
                     )?;
                 }
                 ActionRequiredData::ElicitationResponse { .. } => {}
+                ActionRequiredData::ElicitationDeclined { .. } => {}
             },
             MessageContent::SystemNotification(notification) => {
                 send_status_message_update(
@@ -2603,17 +2604,30 @@ impl GooseAcpAgent {
         cx: &ConnectionTo<Client>,
         req: ElicitationRespondRequest,
     ) -> Result<EmptyResponse, agent_client_protocol::Error> {
-        ActionRequiredManager::global()
-            .submit_response(req.elicitation_id.clone(), req.user_data.clone())
-            .await
-            .invalid_params_err_ctx("Failed to submit elicitation response")?;
+        let is_decline = req.action.as_deref() == Some("decline");
+
+        if is_decline {
+            ActionRequiredManager::global()
+                .submit_decline(req.elicitation_id.clone())
+                .await
+                .invalid_params_err_ctx("Failed to submit elicitation decline")?;
+        } else {
+            ActionRequiredManager::global()
+                .submit_response(req.elicitation_id.clone(), req.user_data.clone())
+                .await
+                .invalid_params_err_ctx("Failed to submit elicitation response")?;
+        }
 
         let response_message = Message::user()
             .with_generated_id()
-            .with_content(MessageContent::action_required_elicitation_response(
-                req.elicitation_id.clone(),
-                req.user_data,
-            ))
+            .with_content(if is_decline {
+                MessageContent::action_required_elicitation_declined(req.elicitation_id.clone())
+            } else {
+                MessageContent::action_required_elicitation_response(
+                    req.elicitation_id.clone(),
+                    req.user_data,
+                )
+            })
             .agent_only();
 
         self.session_manager
@@ -2628,7 +2642,11 @@ impl GooseAcpAgent {
             InteractionUpdate {
                 interaction: Interaction::Elicitation {
                     id: req.elicitation_id,
-                    state: InteractionState::Submitted,
+                    state: if is_decline {
+                        InteractionState::Declined
+                    } else {
+                        InteractionState::Submitted
+                    },
                     message: None,
                     requested_schema: None,
                 },

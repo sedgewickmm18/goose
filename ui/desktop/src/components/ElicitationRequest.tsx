@@ -14,6 +14,10 @@ const i18n = defineMessages({
     id: 'elicitationRequest.submitted',
     defaultMessage: 'Information submitted',
   },
+  declined: {
+    id: 'elicitationRequest.declined',
+    defaultMessage: 'Information request declined',
+  },
   expired: {
     id: 'elicitationRequest.expired',
     defaultMessage: 'This request has expired. The extension will need to ask again.',
@@ -30,6 +34,10 @@ const i18n = defineMessages({
     id: 'elicitationRequest.accept',
     defaultMessage: 'Accept',
   },
+  decline: {
+    id: 'elicitationRequest.decline',
+    defaultMessage: 'Decline',
+  },
   waitingForResponse: {
     id: 'elicitationRequest.waitingForResponse',
     defaultMessage: 'Waiting for your response ({timeRemaining} remaining)',
@@ -38,11 +46,14 @@ const i18n = defineMessages({
 
 const ELICITATION_TIMEOUT_SECONDS = 300;
 
+type ElicitationState = 'pending' | 'submitted' | 'declined';
+
 interface ElicitationRequestProps {
   isCancelledMessage: boolean;
   isClicked: boolean;
   actionRequiredContent: ActionRequired & { type: 'actionRequired' };
   onSubmit: (elicitationId: string, userData: Record<string, unknown>) => void;
+  onDecline?: (elicitationId: string) => void;
 }
 
 function formatTime(seconds: number): string {
@@ -56,14 +67,17 @@ export default function ElicitationRequest({
   isClicked,
   actionRequiredContent,
   onSubmit,
+  onDecline,
 }: ElicitationRequestProps) {
   const intl = useIntl();
-  const [submitted, setSubmitted] = useState(isClicked);
+  const [state, setState] = useState<ElicitationState>(
+    isClicked ? 'submitted' : 'pending'
+  );
   const [timeRemaining, setTimeRemaining] = useState(ELICITATION_TIMEOUT_SECONDS);
   const startTimeRef = useRef(Date.now());
 
   useEffect(() => {
-    if (submitted || isCancelledMessage || isClicked) return;
+    if (state !== 'pending' || isCancelledMessage || isClicked) return;
 
     const interval = setInterval(() => {
       const elapsed = Math.floor((Date.now() - startTimeRef.current) / 1000);
@@ -76,7 +90,7 @@ export default function ElicitationRequest({
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [submitted, isCancelledMessage, isClicked]);
+  }, [state, isCancelledMessage, isClicked]);
 
   if (actionRequiredContent.data.actionType !== 'elicitation') {
     return null;
@@ -88,13 +102,18 @@ export default function ElicitationRequest({
   const hasSchemaFields = Boolean(schema.properties && Object.keys(schema.properties).length > 0);
 
   const handleSubmit = (formData: Record<string, unknown>) => {
-    setSubmitted(true);
+    setState('submitted');
     onSubmit(elicitationId, formData);
   };
 
   const handleAccept = () => {
-    setSubmitted(true);
+    setState('submitted');
     onSubmit(elicitationId, {});
+  };
+
+  const handleDecline = () => {
+    setState('declined');
+    onDecline?.(elicitationId);
   };
 
   if (isCancelledMessage) {
@@ -105,7 +124,7 @@ export default function ElicitationRequest({
     );
   }
 
-  if (submitted) {
+  if (state === 'submitted') {
     return (
       <div className="goose-message-content bg-background-secondary rounded-2xl px-4 py-2 text-text-primary">
         <div className="flex items-center gap-2">
@@ -120,6 +139,26 @@ export default function ElicitationRequest({
             <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
           </svg>
           <span>{intl.formatMessage(i18n.submitted)}</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (state === 'declined') {
+    return (
+      <div className="goose-message-content bg-background-secondary rounded-2xl px-4 py-2 text-text-primary">
+        <div className="flex items-center gap-2">
+          <svg
+            className="w-5 h-5 text-gray-500"
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+          <span>{intl.formatMessage(i18n.declined)}</span>
         </div>
       </div>
     );
@@ -170,6 +209,13 @@ export default function ElicitationRequest({
           <div className="flex gap-2">
             <Button type="button" onClick={handleAccept}>
               {intl.formatMessage(i18n.accept)}
+            </Button>
+          </div>
+        )}
+        {onDecline && (
+          <div className="mt-2">
+            <Button type="button" variant="outline" onClick={handleDecline}>
+              {intl.formatMessage(i18n.decline)}
             </Button>
           </div>
         )}

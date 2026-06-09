@@ -66,6 +66,7 @@ interface ProgressiveMessageListProps {
     elicitationId: string,
     userData: Record<string, unknown>
   ) => Promise<void>;
+  declineElicitation?: (elicitationId: string) => Promise<void>;
 }
 
 export default function ProgressiveMessageList({
@@ -82,6 +83,7 @@ export default function ProgressiveMessageList({
   onMessageUpdate,
   onRenderingComplete,
   submitElicitationResponse,
+  declineElicitation,
 }: ProgressiveMessageListProps) {
   const intl = useIntl();
   const [renderedCount, setRenderedCount] = useState(() => {
@@ -303,6 +305,7 @@ export default function ProgressiveMessageList({
                     message.role === 'assistant'
                   }
                   submitElicitationResponse={submitElicitationResponse}
+                  declineElicitation={declineElicitation}
                 />
               )}
             </div>
@@ -322,6 +325,7 @@ export default function ProgressiveMessageList({
     onMessageUpdate,
     toolCallChains,
     submitElicitationResponse,
+    declineElicitation,
     getPreviousResolvedModel,
     getResolvedModel,
     renderModelChangeDisclosure,

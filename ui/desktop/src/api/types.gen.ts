@@ -23,6 +23,9 @@ export type ActionRequiredData = {
     actionType: 'elicitationResponse';
     id: string;
     user_data: unknown;
+} | {
+    actionType: 'elicitationDeclined';
+    id: string;
 };
 
 export type AddExtensionRequest = {

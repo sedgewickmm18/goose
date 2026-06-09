@@ -35,6 +35,7 @@ interface GooseMessageProps {
     elicitationId: string,
     userData: Record<string, unknown>
   ) => Promise<void>;
+  declineElicitation?: (elicitationId: string) => Promise<void>;
 }
 
 export default function GooseMessage({
@@ -45,6 +46,7 @@ export default function GooseMessage({
   append,
   isStreaming,
   submitElicitationResponse,
+  declineElicitation,
 }: GooseMessageProps) {
   const contentRef = useRef<HTMLDivElement | null>(null);
 
@@ -207,6 +209,7 @@ export default function GooseMessage({
             isClicked={false}
             actionRequiredContent={elicitationContent}
             onSubmit={submitElicitationResponse}
+            onDecline={declineElicitation}
           />
         )}
       </div>

@@ -326,6 +326,7 @@ pub async fn session_reply(
                 if matches!(
                     ar.data,
                     goose::conversation::message::ActionRequiredData::ElicitationResponse { .. }
+                    | goose::conversation::message::ActionRequiredData::ElicitationDeclined { .. }
                 )
         )
     });
